@@ -249,3 +249,286 @@ def create_games_bulk(games: List[GameCreate]):
     finally:
         cursor.close()
         conn.close()
+
+
+# 1. Obtener todos los jugadores de un equipo específico
+@router.get("/Query1/", tags=["Query1: Get all players by team id"], response_model=List[Player])
+def get_all_players_by_team_id(team_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = "SELECT * FROM players WHERE team_id = %s"
+        cursor.execute(query, (team_id,))
+        players = cursor.fetchall()
+        return [Player(**player) for player in players]
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail="Error al acceder a la base de datos: " + str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+# 2. Obtener todos los equipos junto con su entrenador (LEFT JOIN)
+@router.get("/Query2/", tags=["Query2: Get all teams with their coaches"], response_model=List[dict])
+def get_all_teams_with_coaches():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT teams.team_name, coaches.first_name, coaches.last_name, coaches.role
+        FROM teams
+        LEFT JOIN coaches ON teams.team_id = coaches.team_id
+        """
+        cursor.execute(query)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 3. Obtener todos los juegos y resultados (INNER JOIN entre equipos)
+@router.get("/Query3/", tags=["Query3: Get all games and scores"], response_model=List[dict])
+def get_all_games_and_scores():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT g.game_date, ht.team_name AS home_team, g.home_team_score, 
+               at.team_name AS away_team, g.away_team_score
+        FROM games g
+        INNER JOIN teams ht ON g.home_team_id = ht.team_id
+        INNER JOIN teams at ON g.away_team_id = at.team_id
+        """
+        cursor.execute(query)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 4. Obtener el jugador con el máximo número de touchdowns
+@router.get("/Query4/", tags=["Query4: Get player with max touchdowns"], response_model=dict)
+def get_player_with_max_touchdowns():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT p.first_name, p.last_name, ps.touchdowns
+        FROM players p
+        INNER JOIN player_stats ps ON p.player_id = ps.player_id
+        ORDER BY ps.touchdowns DESC
+        LIMIT 1
+        """
+        cursor.execute(query)
+        return cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 5. Obtener el equipo con más touchdowns totales en un juego
+@router.get("/Query5/", tags=["Query5: Get team with max touchdowns in a game"], response_model=dict)
+def get_team_with_max_touchdowns():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT t.team_name, ts.total_touchdowns
+        FROM teams t
+        INNER JOIN team_stats ts ON t.team_id = ts.team_id
+        ORDER BY ts.total_touchdowns DESC
+        LIMIT 1
+        """
+        cursor.execute(query)
+        return cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 6. Obtener el promedio de yardas por jugador en un juego
+@router.get("/Query6/", tags=["Query6: Get average yards per player per game"], response_model=List[dict])
+def get_avg_yards_per_player():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT p.first_name, p.last_name, AVG(ps.passing_yards + ps.rushing_yards) AS avg_yards
+        FROM players p
+        INNER JOIN player_stats ps ON p.player_id = ps.player_id
+        GROUP BY p.player_id
+        """
+        cursor.execute(query)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 7. Obtener el equipo con la menor cantidad de penalizaciones en un juego
+@router.get("/Query7/", tags=["Query7: Get team with min penalties in a game"], response_model=dict)
+def get_team_with_min_penalties():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT t.team_name, ts.penalties
+        FROM teams t
+        INNER JOIN team_stats ts ON t.team_id = ts.team_id
+        ORDER BY ts.penalties ASC
+        LIMIT 1
+        """
+        cursor.execute(query)
+        return cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 8. Obtener la lista de juegos en los que un jugador específico ha participado
+@router.get("/Query8/", tags=["Query8: Get games by player id"], response_model=List[dict])
+def get_games_by_player_id(player_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT g.game_date, ht.team_name AS home_team, at.team_name AS away_team
+        FROM games g
+        INNER JOIN player_stats ps ON g.game_id = ps.game_id
+        INNER JOIN teams ht ON g.home_team_id = ht.team_id
+        INNER JOIN teams at ON g.away_team_id = at.team_id
+        WHERE ps.player_id = %s
+        """
+        cursor.execute(query, (player_id,))
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 9. Obtener la cantidad total de jugadores en cada equipo
+@router.get("/Query9/", tags=["Query9: Get total players per team"], response_model=List[dict])
+def get_total_players_per_team():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT t.team_name, COUNT(p.player_id) AS total_players
+        FROM teams t
+        LEFT JOIN players p ON t.team_id = p.team_id
+        GROUP BY t.team_id
+        """
+        cursor.execute(query)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 10. Obtener el equipo con el mayor número de juegos ganados (considerando el score)
+@router.get("/Query10/", tags=["Query10: Get team with most wins"], response_model=dict)
+def get_team_with_most_wins():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT t.team_name, COUNT(*) AS wins
+        FROM games g
+        INNER JOIN teams t ON g.home_team_id = t.team_id AND g.home_team_score > g.away_team_score
+        OR g.away_team_id = t.team_id AND g.away_team_score > g.home_team_score
+        GROUP BY t.team_id
+        ORDER BY wins DESC
+        LIMIT 1
+        """
+        cursor.execute(query)
+        return cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 11. Obtener la cantidad total de touchdowns de cada jugador
+@router.get("/Query11/", tags=["Query11: Get total touchdowns per player"], response_model=List[dict])
+def get_total_touchdowns_per_player():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT p.first_name, p.last_name, SUM(ps.touchdowns) AS total_touchdowns
+        FROM players p
+        INNER JOIN player_stats ps ON p.player_id = ps.player_id
+        GROUP BY p.player_id
+        """
+        cursor.execute(query)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 12. Obtener el promedio de penalizaciones por equipo en todos sus juegos
+@router.get("/Query12/", tags=["Query12: Get average penalties per team"], response_model=List[dict])
+def get_avg_penalties_per_team():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT t.team_name, AVG(ts.penalties) AS avg_penalties
+        FROM teams t
+        INNER JOIN team_stats ts ON t.team_id = ts.team_id
+        GROUP BY t.team_id
+        """
+        cursor.execute(query)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 13. Obtener el juego con el total de yardas más alto (sumando ambos equipos)
+@router.get("/Query13/", tags=["Query13: Get game with highest total yards"], response_model=dict)
+def get_game_with_highest_total_yards():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT g.game_date, ht.team_name AS home_team, at.team_name AS away_team, 
+               (home_team_stats.total_yards + away_team_stats.total_yards) AS total_yards
+        FROM games g
+        INNER JOIN team_stats home_team_stats ON g.home_team_id = home_team_stats.team_id AND g.game_id = home_team_stats.game_id
+        INNER JOIN team_stats away_team_stats ON g.away_team_id = away_team_stats.team_id AND g.game_id = away_team_stats.game_id
+        INNER JOIN teams ht ON g.home_team_id = ht.team_id
+        INNER JOIN teams at ON g.away_team_id = at.team_id
+        ORDER BY total_yards DESC
+        LIMIT 1
+        """
+        cursor.execute(query)
+        return cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 14. Obtener el jugador con el máximo de yardas en un juego específico
+@router.get("/Query14/", tags=["Query14: Get player with max yards in a game"], response_model=dict)
+def get_player_with_max_yards_in_game(game_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT p.first_name, p.last_name, (ps.passing_yards + ps.rushing_yards) AS total_yards
+        FROM players p
+        INNER JOIN player_stats ps ON p.player_id = ps.player_id
+        WHERE ps.game_id = %s
+        ORDER BY total_yards DESC
+        LIMIT 1
+        """
+        cursor.execute(query, (game_id,))
+        return cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+# 15. Obtener la lista de entrenadores y su equipo correspondiente
+@router.get("/Query15/", tags=["Query15: Get list of coaches and their teams"], response_model=List[dict])
+def get_list_of_coaches_and_teams():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+        SELECT c.first_name, c.last_name, c.role, t.team_name
+        FROM coaches c
+        INNER JOIN teams t ON c.team_id = t.team_id
+        """
+        cursor.execute(query)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
