@@ -43,5 +43,5 @@ Create file *requirements.txt*
 
 ## Steps to create a new branch 
 ```bash
-    git checkout -b feature/"name of the branch"
+    git checkout -b feature/endpoint_inserts
 ```
